@@ -38,7 +38,9 @@ enum parse_return
     LEPT_PARSE_NUMBER_TOO_BIG,
     LEPT_PARSE_MISS_QUOTATION_MARK,
     LEPT_PARSE_INVALID_STRING_ESCAPE,
-    LEPT_PARSE_INVALID_STRING_CHAR
+    LEPT_PARSE_INVALID_STRING_CHAR,
+    LEPT_PARSE_INVALID_UNICODE_HEX,
+    LEPT_PARSE_INVALID_UNICODE_SURROGATE
 };
 
 class LeptJson
@@ -78,6 +80,8 @@ class LeptJson
     int lept_parse_literal(lept_context &ctx, lept_value &v, const std::string &literal, lept_type type);
     int lept_parse_number(lept_context &ctx, lept_value &v);
     int lept_parse_string(lept_context &ctx, lept_value &v);
+    const char* lept_parse_hex4(const char *json, unsigned &u);
+    void lept_encode_utf8(lept_context &ctx, unsigned u);
     void lept_free(lept_value &v);
 };
 

@@ -149,8 +149,8 @@ static void test_parse_string()
     TEST_PARSE_STRING("abc", "\"abc\"");
     TEST_PARSE_STRING("Hello\nWorld", "\"Hello\\nWorld\"");
     TEST_PARSE_STRING("\" \\ / \b \f \n \r \t", "\"\\\" \\\\ \\/ \\b \\f \\n \\r \\t\"");
-    #if 0
-    TEST_PARSE_STRING("Hello\0World", "\"Hello\u0000World\"");
+    #if 1
+    TEST_PARSE_STRING("Hello\0World", "\"Hello\\u0000World\"");
     TEST_PARSE_STRING("\x24", "\"\\u0024\"");         /* Dollar sign U+0024 */
     TEST_PARSE_STRING("\xC2\xA2", "\"\\u00A2\"");     /* Cents sign U+00A2 */
     TEST_PARSE_STRING("\xE2\x82\xAC", "\"\\u20AC\""); /* Euro sign U+20AC */
@@ -172,12 +172,37 @@ static void test_parse_invalid_string_escape()
     TEST_PARSE_ERROR(LEPT_PARSE_INVALID_STRING_ESCAPE, "\"\\x12\"");
 }
 
-static void test_parse_invalid_string_char() {
+static void test_parse_invalid_string_char() 
+{
     TEST_PARSE_ERROR(LEPT_PARSE_INVALID_STRING_CHAR, "\"\x01\"");
     TEST_PARSE_ERROR(LEPT_PARSE_INVALID_STRING_CHAR, "\"\x1F\"");
 }
 
+static void test_parse_invalid_unicode_surrogate()
+{
+    TEST_PARSE_ERROR(LEPT_PARSE_INVALID_UNICODE_SURROGATE, "\"\\uD800\"");
+    TEST_PARSE_ERROR(LEPT_PARSE_INVALID_UNICODE_SURROGATE, "\"\\uDBFF\"");
+    TEST_PARSE_ERROR(LEPT_PARSE_INVALID_UNICODE_SURROGATE, "\"\\uD800\\\\\"");
+    TEST_PARSE_ERROR(LEPT_PARSE_INVALID_UNICODE_SURROGATE, "\"\\uD800\\uDBFF\"");
+    TEST_PARSE_ERROR(LEPT_PARSE_INVALID_UNICODE_SURROGATE, "\"\\uD800\\uE000\"");
+}
 
+static void test_parse_invalid_unicode_hex() 
+{
+    TEST_PARSE_ERROR(LEPT_PARSE_INVALID_UNICODE_HEX, "\"\\u\"");
+    TEST_PARSE_ERROR(LEPT_PARSE_INVALID_UNICODE_HEX, "\"\\u0\"");
+    TEST_PARSE_ERROR(LEPT_PARSE_INVALID_UNICODE_HEX, "\"\\u01\"");
+    TEST_PARSE_ERROR(LEPT_PARSE_INVALID_UNICODE_HEX, "\"\\u012\"");
+    TEST_PARSE_ERROR(LEPT_PARSE_INVALID_UNICODE_HEX, "\"\\u/000\"");
+    TEST_PARSE_ERROR(LEPT_PARSE_INVALID_UNICODE_HEX, "\"\\uG000\"");
+    TEST_PARSE_ERROR(LEPT_PARSE_INVALID_UNICODE_HEX, "\"\\u0/00\"");
+    TEST_PARSE_ERROR(LEPT_PARSE_INVALID_UNICODE_HEX, "\"\\u0G00\"");
+    TEST_PARSE_ERROR(LEPT_PARSE_INVALID_UNICODE_HEX, "\"\\u0/00\"");
+    TEST_PARSE_ERROR(LEPT_PARSE_INVALID_UNICODE_HEX, "\"\\u00G0\"");
+    TEST_PARSE_ERROR(LEPT_PARSE_INVALID_UNICODE_HEX, "\"\\u000/\"");
+    TEST_PARSE_ERROR(LEPT_PARSE_INVALID_UNICODE_HEX, "\"\\u000G\"");
+    TEST_PARSE_ERROR(LEPT_PARSE_INVALID_UNICODE_HEX, "\"\\u 123\"");
+}     
 
 static void test_access_string()
 {
@@ -224,6 +249,8 @@ static void test_parse()
     test_parse_missing_quotation_mark();
     test_parse_invalid_string_escape();
     test_parse_invalid_string_char();
+    test_parse_invalid_unicode_hex();
+    test_parse_invalid_unicode_surrogate();
     test_parse_number_too_big();
     test_parse_expect_value();
     test_parse_invalid_value();
