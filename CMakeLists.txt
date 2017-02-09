@@ -6,6 +6,7 @@ if (CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 add_compile_options(-std=c++11)
+add_compile_options(-g)
 add_library(leptjson source/leptjson.cpp)
 add_executable(leptjson_test test/test.cpp)
 target_link_libraries(leptjson_test leptjson)
