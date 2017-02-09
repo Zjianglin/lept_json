@@ -106,7 +106,7 @@ int LeptJson::lept_parse_string(lept_context &ctx, lept_value &v)
                 }
                 break;
             default: 
-                if (ch < 0x20) {
+                if ((unsigned char)ch < 0x20) {
                     ctx.top = head;
                     return LEPT_PARSE_INVALID_STRING_CHAR;
                 }
@@ -217,8 +217,11 @@ void* LeptJson::lept_context::push(size_t count)
         while (size <= (top + count))
             size += size >> 1;
         auto q = stack;
-        stack.reset(new char[size]);
-        std::memcpy(stack.get(), q.get(), top);
+        // here must input a deleter to shared_ptr.reset, so the dynamical memory could be freed later
+        stack.reset(new char[size], [](void *p) { delete [](char*)p ;});
+        if (q) {
+            std::memcpy(stack.get(), q.get(), top);
+        }
     }
     ret = stack.get() + top;
     top += count;
