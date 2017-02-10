@@ -109,7 +109,7 @@ void LeptJson::lept_encode_utf8(lept_context &ctx, unsigned u)
 
 int LeptJson::lept_parse_string(lept_context &ctx, lept_value &v)
 {
-    const char *str;
+    char *str;
     size_t len;
     int ret = lept_parse_string_raw(ctx, &str, len);
     if (ret != LEPT_PARSE_OK) 
@@ -120,7 +120,7 @@ int LeptJson::lept_parse_string(lept_context &ctx, lept_value &v)
 
 
 #define STRING_ERROR(ret) do { ctx.top = head; return ret; } while (0)
-int LeptJson::lept_parse_string_raw(lept_context &ctx, const char **str, size_t &len)
+int LeptJson::lept_parse_string_raw(lept_context &ctx, char **str, size_t &len)
 {
     EXPECT(ctx, '\"');
     const auto *p = ctx.json;
@@ -220,6 +220,82 @@ int LeptJson::lept_parse_array(lept_context &ctx, lept_value &v)
     return ret;
 }
 
+int LeptJson::lept_parse_object(lept_context &ctx, lept_value &v)
+{
+    EXPECT(ctx, '{');
+    int ret;
+    lept_member mem;
+    char *key = nullptr;
+    size_t klen, size = 0;
+
+    lept_parse_whitespace(ctx);
+    if (*ctx.json == '}') {
+        ctx.json++;
+        v.type = LEPT_OBJECT;
+        v.u.obj.size = 0;
+        v.u.obj.m = nullptr;
+        return LEPT_PARSE_OK;
+    }
+    mem.k = nullptr;
+    for (;;) {
+        if (*ctx.json != '\"') {
+            ret = LEPT_PARSE_MISS_KEY;
+            break;
+        }
+        if ((ret = lept_parse_string_raw(ctx, &key, klen)) != LEPT_PARSE_OK)
+            break;
+        /*
+        `key` point to a tempaorary stack space, so the data which `key` point to should be 
+        copy to a new space for lept_member mem to store;
+        */
+        memcpy(mem.k = new char[klen+1], key, klen);
+        mem.klen = klen;
+        mem.k[klen] = '\0';
+        key = nullptr;
+        lept_parse_whitespace(ctx);
+        
+        if (*ctx.json != ':') {
+            ret = LEPT_PARSE_MISS_COLON;
+            break;
+        }
+        ctx.json++;
+        lept_parse_whitespace(ctx);
+
+        if ((ret = lept_parse_value(ctx, mem.v)) != LEPT_PARSE_OK) 
+            break;
+        memcpy((lept_member*)ctx.push(sizeof(lept_member)), &mem, sizeof(lept_member));
+        size++;
+        mem.k = nullptr; // ownership is transferred to member on stack 
+
+        lept_parse_whitespace(ctx);
+        if (*ctx.json == ',') {
+            ctx.json++;
+            lept_parse_whitespace(ctx);
+        }   
+        else if (*ctx.json == '}') {
+            ctx.json++;
+            v.type = LEPT_OBJECT;
+            v.u.obj.size = size;
+            v.u.obj.m = new lept_member[size];
+            size *= sizeof(lept_member);
+            memcpy(v.u.obj.m, (lept_member*)ctx.pop(size), size);
+            return LEPT_PARSE_OK;
+        }
+        else {
+            ret = LEPT_PARSE_MISS_COMMA_OR_CURLY_BRACKET;
+            break;
+        }
+    }
+    //when parse object error; pop and free stack and key (char *)
+    if (mem.k) delete []mem.k;  //when object.key is parsed normally, but miss colon or other errors
+    for (int i = 0; i < size; ++i) {
+        auto *member = (lept_member*)ctx.pop(sizeof(lept_member));
+        delete []member->k; // free object.key space
+        lept_free(member->v);
+    }
+    return ret;
+}
+
 int LeptJson::lept_parse_value(lept_context &ctx, lept_value &v)
 {
     switch(*ctx.json) {
@@ -228,6 +304,7 @@ int LeptJson::lept_parse_value(lept_context &ctx, lept_value &v)
         case 'f': return lept_parse_literal(ctx, v, "false", LEPT_FALSE);
         case '"': return lept_parse_string(ctx, v);
         case '[': return lept_parse_array(ctx, v);
+        case '{': return lept_parse_object(ctx, v);
         case '\0': return LEPT_PARSE_EXPECT_VALUE;
         default: return lept_parse_number(ctx, v);
     }
@@ -276,6 +353,13 @@ void LeptJson::lept_free(lept_value &v)
             for(size_t i = 0; i < v.u.a.size; ++i)
                 lept_free(v.u.a.e[i]);
             delete []v.u.a.e;
+            break;
+        case LEPT_OBJECT:
+            for (int i = 0; i < v.u.obj.size; ++i) {
+                delete []v.u.obj.m[i].k;
+                lept_free(v.u.obj.m[i].v);
+            }
+            delete []v.u.obj.m;
             break;
         default: ;
     }
@@ -348,4 +432,3 @@ void* LeptJson::lept_context::pop(size_t count)
     assert(top >= count);
     return stack.get() + (top -= count);
 }
-

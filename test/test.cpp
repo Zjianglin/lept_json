@@ -264,6 +264,91 @@ static void test_parse_array_miss_comma_or_square_brace()
 
 }
 
+#define EXPECT_TRUE(actual) EXPECT_EQ_BASE((actual) != 0, "true", "false", "%s")
+static void test_parse_object()
+{
+    LeptJson v;
+    EXPECT_EQ_INT(LEPT_PARSE_OK, v.parse("{ \
+        \"n\" : null,                       \
+        \"t\" : true,                       \
+        \"f\" : false,                      \
+        \"s\" : \"abc\",                    \
+        \"n\" : 123.123 ,                   \
+        \"a\" : [ 0, 1, 2 ],                   \
+        \"o\" : { \"0\": 0, \"1\": 1, \"2\":2 }\
+    }"));
+
+    EXPECT_EQ_INT(LEPT_OBJECT, v.get_type());
+    EXPECT_EQ_SIZE_T(7, v.get_object_size());
+
+    EXPECT_EQ_INT(LEPT_NULL, v.get_object_value(0)->type);
+    EXPECT_EQ_STRING("n", v.get_object_key(0), v.get_object_key_length(0));
+    EXPECT_EQ_INT(LEPT_TRUE, v.get_object_value(1)->type);
+    EXPECT_EQ_STRING("t", v.get_object_key(1), v.get_object_key_length(1));
+    EXPECT_EQ_INT(LEPT_FALSE, v.get_object_value(2)->type);
+    EXPECT_EQ_STRING("f", v.get_object_key(2), v.get_object_key_length(2));
+    EXPECT_EQ_INT(LEPT_STRING, v.get_object_value(3)->type);
+    EXPECT_EQ_STRING("s", v.get_object_key(3), v.get_object_key_length(3));
+    EXPECT_EQ_STRING("abc", v.get_object_value(3)->u.s.s, v.get_object_value(3)->u.s.len);
+    EXPECT_EQ_SIZE_T(3, v.get_object_value(3)->u.s.len);
+    EXPECT_EQ_INT(LEPT_NUMBER, v.get_object_value(4)->type);
+    EXPECT_EQ_STRING("n", v.get_object_key(4), v.get_object_key_length(4));
+    EXPECT_EQ_DOUBLE(123.123, v.get_object_value(4)->u.num);
+
+    EXPECT_EQ_INT(LEPT_ARRAY, v.get_object_value(5)->type);
+    EXPECT_EQ_STRING("a", v.get_object_key(5), v.get_object_key_length(5));
+    EXPECT_EQ_SIZE_T(3, v.get_object_value(5)->u.a.size);
+    for (int i = 0; i < v.get_object_value(5)->u.a.size; ++i) {
+        auto *e = lept_value_get_array_element(*v.get_object_value(5), i);
+        EXPECT_EQ_INT(LEPT_NUMBER, e->type);
+        EXPECT_EQ_DOUBLE((double)i, e->u.num);
+    }
+
+    EXPECT_EQ_INT(LEPT_OBJECT, v.get_object_value(6)->type);
+    EXPECT_EQ_STRING("o", v.get_object_key(6), v.get_object_key_length(6));
+    EXPECT_EQ_SIZE_T(3, v.get_object_value(6)->u.obj.size);
+    {
+        auto obj = *(v.get_object_value(6));
+        for (int i = 0; i < lept_value_get_object_size(obj); ++i) {
+            auto e = lept_value_get_object_value(obj, i);
+            EXPECT_EQ_SIZE_T(1, lept_value_get_object_key_length(obj, i));
+            EXPECT_TRUE('0' + i == lept_value_get_object_key(obj, i)[0]);
+            EXPECT_EQ_INT(LEPT_NUMBER, e->type);
+            EXPECT_EQ_DOUBLE((double)i, e->u.num);
+        }
+    }
+}
+
+
+static void test_parse_object_miss_key()
+{
+    LeptJson v;
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_KEY, v.parse("{,}"));
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_KEY, v.parse("{ :123, \"a\" : 1}"));
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_KEY, v.parse("{ \"k\":1, }"));
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_KEY, v.parse("{ null:null}"));
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_KEY, v.parse("{ true: true}"));
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_KEY, v.parse("{ false: false}"));
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_KEY, v.parse("{ []: 123}"));
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_KEY, v.parse("{ {}: 111}"));
+}
+
+static void test_parse_object_miss_colon()
+{
+    LeptJson v;
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_COLON, v.parse("{\"a\" ,}"));
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_COLON, v.parse("{\"a\" \"b\"}"));
+}
+    
+static void test_parse_object_miss_comma_or_curly_bracket()
+{
+    LeptJson v;
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_COMMA_OR_CURLY_BRACKET, v.parse("{ \"a\": 1233 "));
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_COMMA_OR_CURLY_BRACKET, v.parse("{ \"a\":{}"));
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_COMMA_OR_CURLY_BRACKET, v.parse("{\"a\": 1 \"b\": 2}"));
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_COMMA_OR_CURLY_BRACKET, v.parse("{\"a\":1 ]"));
+}
+
 static void test_access_string()
 {
     LeptJson v;
@@ -307,6 +392,11 @@ static void test_parse()
     test_parse_number();
     test_parse_string();
     test_parse_array();
+    test_parse_object();
+
+    test_parse_object_miss_key();
+    test_parse_object_miss_colon();
+    test_parse_object_miss_comma_or_curly_bracket();
     test_parse_array_miss_comma_or_square_brace();
     test_parse_missing_quotation_mark();
     test_parse_invalid_string_escape();
