@@ -21,10 +21,8 @@ struct lept_value
 {
     union  {
         double num;
-        struct { 
-            char* s; 
-            size_t len; 
-        }s;
+        struct { char*       s ; size_t len ; } s;
+        struct { lept_value* e ; size_t size; } a;
     } u;
     lept_type type;
 };
@@ -40,8 +38,17 @@ enum parse_return
     LEPT_PARSE_INVALID_STRING_ESCAPE,
     LEPT_PARSE_INVALID_STRING_CHAR,
     LEPT_PARSE_INVALID_UNICODE_HEX,
-    LEPT_PARSE_INVALID_UNICODE_SURROGATE
+    LEPT_PARSE_INVALID_UNICODE_SURROGATE,
+    LEPT_PARSE_MISS_COMMA_OR_SQUARE_BRACKET,
 };
+
+inline size_t lept_value_get_array_size(const lept_value &v) { assert(v.type == LEPT_ARRAY); return v.u.a.size;}
+inline lept_value* lept_value_get_array_element(const lept_value &v, size_t index)
+{
+    assert(v.type == LEPT_ARRAY);
+    assert(index < v.u.a.size);
+    return v.u.a.e + index;
+}
 
 class LeptJson
 {
@@ -61,6 +68,10 @@ class LeptJson
     int         get_boolean() const;    
     const char* get_string() const;
     size_t      get_string_length() const;
+    lept_value* get_array_element(size_t index) const;
+    size_t      get_array_size() const  { return lept_value_get_array_size(parsed_v_); }
+
+    void        clear()                 { lept_free(parsed_v_); }
 
   private:
     struct lept_context {
@@ -81,6 +92,7 @@ class LeptJson
     int lept_parse_number(lept_context &ctx, lept_value &v);
     int lept_parse_string(lept_context &ctx, lept_value &v);
     int lept_parse_string_raw(lept_context &ctx, const char **s, size_t &len);
+    int lept_parse_array(lept_context &ctx, lept_value &v);
     const char* lept_parse_hex4(const char *json, unsigned &u);
     void lept_encode_utf8(lept_context &ctx, unsigned u);
     void lept_free(lept_value &v);

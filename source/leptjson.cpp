@@ -176,6 +176,49 @@ int LeptJson::lept_parse_string_raw(lept_context &ctx, const char **str, size_t 
 
 }
 
+int LeptJson::lept_parse_array(lept_context &ctx, lept_value &v)
+{
+    EXPECT(ctx, '[');
+    int ret, size = 0;
+    lept_parse_whitespace(ctx);
+    if (*ctx.json == ']') {
+        ctx.json++ ;
+        v.type = LEPT_ARRAY;
+        v.u.a.size = 0;
+        v.u.a.e = nullptr;
+        return LEPT_PARSE_OK;
+    }
+    for (;;) {
+        lept_value element;   
+        element.type = LEPT_NULL;
+        if ((ret = lept_parse_value(ctx, element)) != LEPT_PARSE_OK)
+            break;
+        memcpy((lept_value*)ctx.push(sizeof(lept_value)), &element, sizeof(element)); // push one element to stack
+        size++;
+        lept_parse_whitespace(ctx);
+        if (*ctx.json == ',') { 
+            ctx.json++;
+            lept_parse_whitespace(ctx);
+        }
+        else if (*ctx.json == ']') {
+            ctx.json++;
+            v.type = LEPT_ARRAY;
+            v.u.a.size = size;
+            auto copysize = size * sizeof(lept_value);
+            memcpy(v.u.a.e = new lept_value[size], (lept_value*)ctx.pop(copysize), copysize);
+            return LEPT_PARSE_OK; 
+        }
+        else { 
+            ret = LEPT_PARSE_MISS_COMMA_OR_SQUARE_BRACKET;
+            break;
+        }
+    }
+    // pop and free stack when parse array error;
+    for (int i =0; i < size; ++i) {
+        lept_free(*(lept_value *)ctx.pop(sizeof(lept_value)));
+    }
+    return ret;
+}
 
 int LeptJson::lept_parse_value(lept_context &ctx, lept_value &v)
 {
@@ -184,6 +227,7 @@ int LeptJson::lept_parse_value(lept_context &ctx, lept_value &v)
         case 't': return lept_parse_literal(ctx, v, "true", LEPT_TRUE);
         case 'f': return lept_parse_literal(ctx, v, "false", LEPT_FALSE);
         case '"': return lept_parse_string(ctx, v);
+        case '[': return lept_parse_array(ctx, v);
         case '\0': return LEPT_PARSE_EXPECT_VALUE;
         default: return lept_parse_number(ctx, v);
     }
@@ -207,6 +251,7 @@ int LeptJson::parse(const std::string &json)
             return LEPT_PARSE_ROOT_NOT_SINGULAR;
         }
     }
+    assert(ctx.top == 0);
     return ret;
 
 }
@@ -221,12 +266,16 @@ LeptJson::~LeptJson()
     lept_free(parsed_v_);
 }
 
-
 void LeptJson::lept_free(lept_value &v)
 {
     switch (v.type) {
         case LEPT_STRING: 
             delete []v.u.s.s; 
+            break;
+        case LEPT_ARRAY:
+            for(size_t i = 0; i < v.u.a.size; ++i)
+                lept_free(v.u.a.e[i]);
+            delete []v.u.a.e;
             break;
         default: ;
     }
@@ -266,6 +315,11 @@ size_t      LeptJson::get_string_length() const
 {
     assert(parsed_v_.type == LEPT_STRING);
     return parsed_v_.u.s.len;
+}
+
+lept_value* LeptJson::get_array_element(size_t index) const
+{
+    return lept_value_get_array_element(parsed_v_, index);
 }
 
 void* LeptJson::lept_context::push(size_t count)
