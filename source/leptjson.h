@@ -31,7 +31,7 @@ struct lept_value
 
 struct lept_member
 {
-    char *k; size_t klen;
+    char *k = nullptr; size_t klen;
     lept_value v;
 };
 

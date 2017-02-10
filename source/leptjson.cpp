@@ -236,7 +236,6 @@ int LeptJson::lept_parse_object(lept_context &ctx, lept_value &v)
         v.u.obj.m = nullptr;
         return LEPT_PARSE_OK;
     }
-    mem.k = nullptr;
     for (;;) {
         if (*ctx.json != '\"') {
             ret = LEPT_PARSE_MISS_KEY;
