@@ -80,6 +80,7 @@ class LeptJson
     int lept_parse_literal(lept_context &ctx, lept_value &v, const std::string &literal, lept_type type);
     int lept_parse_number(lept_context &ctx, lept_value &v);
     int lept_parse_string(lept_context &ctx, lept_value &v);
+    int lept_parse_string_raw(lept_context &ctx, const char **s, size_t &len);
     const char* lept_parse_hex4(const char *json, unsigned &u);
     void lept_encode_utf8(lept_context &ctx, unsigned u);
     void lept_free(lept_value &v);

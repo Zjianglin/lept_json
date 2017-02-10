@@ -107,18 +107,30 @@ void LeptJson::lept_encode_utf8(lept_context &ctx, unsigned u)
     }
 }
 
-#define STRING_ERROR(ret) do { ctx.top = head; return ret; } while (0)
 int LeptJson::lept_parse_string(lept_context &ctx, lept_value &v)
+{
+    const char *str;
+    size_t len;
+    int ret = lept_parse_string_raw(ctx, &str, len);
+    if (ret != LEPT_PARSE_OK) 
+        return ret;
+    lept_set_string(v, str, len);
+    return ret;
+}
+
+
+#define STRING_ERROR(ret) do { ctx.top = head; return ret; } while (0)
+int LeptJson::lept_parse_string_raw(lept_context &ctx, const char **str, size_t &len)
 {
     EXPECT(ctx, '\"');
     const auto *p = ctx.json;
-    size_t head = ctx.top, len;
+    size_t head = ctx.top;
     for (;;) {
         auto ch = *p++;
         switch (ch) {
             case '\"':
                 len = ctx.top - head;
-                lept_set_string(v, (const char*)ctx.pop(len), len);
+                *str = (char*)ctx.pop(len);
                 ctx.json = p;
                 return LEPT_PARSE_OK;
             case '\0':
