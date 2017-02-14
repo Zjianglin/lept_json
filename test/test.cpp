@@ -204,6 +204,22 @@ static void test_parse_invalid_unicode_hex()
     TEST_PARSE_ERROR(LEPT_PARSE_INVALID_UNICODE_HEX, "\"\\u 123\"");
 }     
 
+#define TEST_ROUNDTRIP(json) \
+    do { \
+        LeptJson v; \
+        size_t len = 0; \
+        EXPECT_EQ_INT(LEPT_PARSE_OK, v.parse(json)); \
+        auto *json2 = v.stringify(&len); \
+        EXPECT_EQ_STRING(json, json2, len); \
+    } while (0)
+
+static void test_stringify()
+{
+    TEST_ROUNDTRIP("null");
+    TEST_ROUNDTRIP("false");
+    TEST_ROUNDTRIP("true");
+}
+
 static void test_access_string()
 {
     LeptJson v;

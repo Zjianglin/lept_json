@@ -40,7 +40,8 @@ enum parse_return
     LEPT_PARSE_INVALID_STRING_ESCAPE,
     LEPT_PARSE_INVALID_STRING_CHAR,
     LEPT_PARSE_INVALID_UNICODE_HEX,
-    LEPT_PARSE_INVALID_UNICODE_SURROGATE
+    LEPT_PARSE_INVALID_UNICODE_SURROGATE,
+    LEPT_STRINGIFY_OK
 };
 
 class LeptJson
@@ -49,6 +50,7 @@ class LeptJson
     LeptJson();
     ~LeptJson();
     int parse(const std::string &json);
+    char* stringify( size_t *length = nullptr);
 
     void set_type(const lept_type nt)   {  parsed_v_.type = nt; }
     void set_null()                     { parsed_v_.type = LEPT_NULL;}
@@ -72,8 +74,10 @@ class LeptJson
         void* pop(size_t count);
     };
     lept_value parsed_v_;
+    char *json_;
+    size_t length_;
 
-    inline void lept_parse_init() { parsed_v_.type = LEPT_NULL; }
+    inline void lept_parse_init();
     inline void lept_set_string(lept_value &v, const char *s, size_t len);
     void lept_parse_whitespace(lept_context &ctx);
     int lept_parse_value(lept_context &ctx, lept_value &v);
@@ -83,6 +87,8 @@ class LeptJson
     const char* lept_parse_hex4(const char *json, unsigned &u);
     void lept_encode_utf8(lept_context &ctx, unsigned u);
     void lept_free(lept_value &v);
+    void lept_stringify_value(lept_context &ctx, const lept_value &v);
+    void lept_stringify_string(lept_context &ctx, const char *s, const size_t len);
 };
 
 #endif

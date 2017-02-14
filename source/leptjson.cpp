@@ -12,6 +12,10 @@
 #define LEPT_PARSE_STACK_INIT_SIZE 256
 #endif
 
+#ifndef LEPT_STRINGIFY_STACK_INIT_SIZE
+#define LEPT_STRINGIFY_STACK_INIT_SIZE 256
+#endif
+
 using std::shared_ptr;
 
 void LeptJson::lept_parse_whitespace(lept_context &ctx)
@@ -199,7 +203,63 @@ int LeptJson::parse(const std::string &json)
 
 }
 
-LeptJson::LeptJson() 
+char* LeptJson::stringify( size_t *length)
+{
+    if (json_) {
+        if (length) *length = length_;
+        return json_;
+    }
+
+    lept_context ctx;
+    ctx.size = ctx.top = 0;
+    ctx.stack.reset(new char[LEPT_STRINGIFY_STACK_INIT_SIZE], [](void *p) { delete [](char*)p ;});
+    lept_stringify_value(ctx, parsed_v_);
+    if (length)
+        *length = ctx.top;
+    length_ = ctx.top;
+    memcpy(json_ = new char[length_+1], (char*)ctx.pop(length_), length_);
+    json_[length_] = '\0';
+    return json_;
+
+}
+
+#define PUTS(ctx, s, len) memcpy((char*)ctx.push(len), s, len)
+void LeptJson::lept_stringify_value(lept_context &ctx, const lept_value &v)
+{
+    switch (v.type) {
+        case LEPT_NULL:  PUTS(ctx, "null", 4); break;
+        case LEPT_FALSE: PUTS(ctx, "false", 5); break;
+        case LEPT_TRUE:  PUTS(ctx, "true", 4); break;
+        case LEPT_STRING: lept_stringify_string(ctx, v.u.s.s, v.u.s.len); break;
+        case LEPT_NUMBER:
+            ctx.top -= 32 - sprintf((char*)ctx.push(32), "%.17g", v.u.num);
+            break;
+        case LEPT_ARRAY:
+            for (size_t i = 0; i < v.u.a.size; ++i) {
+                if (i > 0)
+                    PUTC(ctx, ',');
+                lept_stringify_value(ctx, v.u.a.e[i]);
+            }
+            break;
+        case LEPT_OBJECT:
+            for (size_t i = 0; i < v.u.obj.size; ++i) {
+                if (i > 0)
+                    PUTC(ctx, ',');
+                lept_stringify_string(ctx, lept_value_object_get_key(v, i),
+                        lept_value_object_get_key_length(v, i));
+                PUTC(ctx, ':');
+                lept_stringify_value(ctx, *lept_value_object_get_value(v, i));
+            }
+            break;
+    }
+}
+
+void LeptJson::lept_stringify_string(lept_context &ctx, const char *s, const size_t len)
+{
+    
+}
+
+LeptJson::LeptJson() :json_(nullptr), length_(0)
 { 
     parsed_v_.type = LEPT_NULL; 
 }
@@ -207,6 +267,7 @@ LeptJson::LeptJson()
 LeptJson::~LeptJson() 
 { 
     lept_free(parsed_v_);
+    if (json_) delete []json_;
 }
 
 
@@ -219,6 +280,15 @@ void LeptJson::lept_free(lept_value &v)
         default: ;
     }
     v.type = LEPT_NULL;
+}
+
+inline void LeptJson::lept_parse_init()
+{
+    lept_free(parsed_v_);
+    parsed_v_.type = LEPT_NULL; 
+    if (json_) delete []json_;
+    json_ = nullptr;
+    length_ = 0;
 }
 
 void LeptJson::set_string(const char *s, size_t len)
