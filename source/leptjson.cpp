@@ -368,28 +368,59 @@ void LeptJson::lept_stringify_value(lept_context &ctx, const lept_value &v)
             ctx.top -= 32 - sprintf((char*)ctx.push(32), "%.17g", v.u.num);
             break;
         case LEPT_ARRAY:
+            PUTC(ctx, '[');
             for (size_t i = 0; i < v.u.a.size; ++i) {
                 if (i > 0)
                     PUTC(ctx, ',');
                 lept_stringify_value(ctx, v.u.a.e[i]);
             }
+            PUTC(ctx, ']');
             break;
         case LEPT_OBJECT:
+            PUTC(ctx, '{');
             for (size_t i = 0; i < v.u.obj.size; ++i) {
                 if (i > 0)
                     PUTC(ctx, ',');
-                lept_stringify_string(ctx, lept_value_object_get_key(v, i),
-                        lept_value_object_get_key_length(v, i));
+                lept_stringify_string(ctx, lept_value_get_object_key(v, i),
+                        lept_value_get_object_key_length(v, i));
                 PUTC(ctx, ':');
-                lept_stringify_value(ctx, *lept_value_object_get_value(v, i));
+                lept_stringify_value(ctx, *lept_value_get_object_value(v, i));
             }
+            PUTC(ctx, '}');
             break;
     }
 }
 
 void LeptJson::lept_stringify_string(lept_context &ctx, const char *s, const size_t len)
 {
-    
+    assert(s != nullptr);
+    static char hex_char[] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
+    auto size = len * 6 + 2;
+    char *p = (char *)ctx.push(size); 
+    char *head = p;
+    *p++ = '"';
+    for (size_t i = 0; i < len; ++i) {
+        unsigned char ch = (unsigned char)s[i];
+        switch (ch) {
+            case '\"': *p++ = '\\'; *p++ = '\"';  break;
+            case '\\': *p++ = '\\'; *p++ = '\\';  break;
+            case '\b': *p++ = '\\'; *p++ = 'b' ;  break;
+            case '\f': *p++ = '\\'; *p++ = 'f' ;  break;
+            case '\r': *p++ = '\\'; *p++ = 'r' ;  break;
+            case '\n': *p++ = '\\'; *p++ = 'n' ;  break;
+            case '\t': *p++ = '\\'; *p++ = 't' ;  break; 
+            default:
+                if (ch < 0x20) {
+                    *p++ = '\\'; *p++ = 'u'; 
+                    *p++ = '0';  *p++ = '0';
+                    *p++ = hex_char[ch >>  4];
+                    *p++ = hex_char[ch & 0x0F];
+                }
+                else *p++ = s[i];
+        }
+    }
+    *p++ = '"';
+    ctx.top -= size -(p - head);
 }
 
 LeptJson::LeptJson() :json_(nullptr), length_(0)
