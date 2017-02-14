@@ -24,6 +24,12 @@ static unsigned test_pass = 0;
 #define EXPECT_EQ_DOUBLE(expect, actual) EXPECT_EQ_BASE((expect) == (actual), expect, actual, "%.17g")
 #define EXPECT_EQ_STRING(expect, actual, len) EXPECT_EQ_BASE(strncmp((expect), (actual), len) == 0, expect, actual, "%s")
 
+#if defined(_MSC_VER)
+#define EXPECT_EQ_SIZE_T(expect, actual) EXPECT_EQ_BASE((expect) == (actual), (size_t)expect, (size_t)actual, "%Iu")
+#else
+#define EXPECT_EQ_SIZE_T(expect, actual) EXPECT_EQ_BASE((expect) == (actual), (size_t)expect, (size_t)actual, "%zu")
+#endif
+
 static void test_parse_null()
 {
     LeptJson v;
@@ -73,16 +79,18 @@ static void test_parse_invalid_value()
     TEST_PARSE_ERROR(LEPT_PARSE_INVALID_VALUE, "nan");
     TEST_PARSE_ERROR(LEPT_PARSE_INVALID_VALUE, "INF");
     TEST_PARSE_ERROR(LEPT_PARSE_INVALID_VALUE, "inf");
+    // invalid value in array 
+    TEST_PARSE_ERROR(LEPT_PARSE_INVALID_VALUE, "[1,]");
+    TEST_PARSE_ERROR(LEPT_PARSE_INVALID_VALUE, "[\"a\", nul]");
 
-    #if 0
-    TEST_PARSE_ERROR(LEPT_PARSE_NUMBER_TOO_BIG, "");
-    #endif
 }
 
 static void test_parset_root_not_singular()
 {
     TEST_PARSE_ERROR(LEPT_PARSE_ROOT_NOT_SINGULAR, "null x");
     TEST_PARSE_ERROR(LEPT_PARSE_ROOT_NOT_SINGULAR, "0123"); /* after zero should be '.' or nothing */
+    TEST_PARSE_ERROR(LEPT_PARSE_ROOT_NOT_SINGULAR, "0x0");
+    TEST_PARSE_ERROR(LEPT_PARSE_ROOT_NOT_SINGULAR, "0x123");
 }
 
 static void test_parse_expect_value() 
@@ -131,6 +139,7 @@ static void test_parse_number()
     TEST_NUMBER(1.797693134862315E308, "1.797693134862315E308"); //max double
     TEST_NUMBER(-1.797693134862315E308, "-1.797693134862315E308");
 }
+
 static void test_parse_number_too_big() {
     TEST_PARSE_ERROR(LEPT_PARSE_NUMBER_TOO_BIG, "1e309");
     TEST_PARSE_ERROR(LEPT_PARSE_NUMBER_TOO_BIG, "-1e309");
@@ -219,6 +228,141 @@ static void test_stringify()
     TEST_ROUNDTRIP("false");
     TEST_ROUNDTRIP("true");
 }
+static void test_parse_array()
+{
+    LeptJson v;
+    EXPECT_EQ_INT(LEPT_PARSE_OK, v.parse("[ ]"));
+    EXPECT_EQ_INT(LEPT_ARRAY,    v.get_type());
+    EXPECT_EQ_SIZE_T(0,          v.get_array_size());
+    v.clear();
+
+    // [ null , false , true , 123 , "abc" ]
+    EXPECT_EQ_INT(LEPT_PARSE_OK, v.parse("[ null , false , true , 123 , \"abc\" ]"));
+    EXPECT_EQ_INT(LEPT_ARRAY, v.get_type());
+    EXPECT_EQ_SIZE_T(5, v.get_array_size());
+
+    EXPECT_EQ_INT(LEPT_NULL,  v.get_array_element(0)->type);
+    EXPECT_EQ_INT(LEPT_FALSE, v.get_array_element(1)->type);
+    EXPECT_EQ_INT(LEPT_TRUE,  v.get_array_element(2)->type);
+
+
+    EXPECT_EQ_INT(LEPT_NUMBER, v.get_array_element(3)->type);
+    EXPECT_EQ_DOUBLE(123.0, v.get_array_element(3)->u.num);
+
+    EXPECT_EQ_INT(LEPT_STRING, v.get_array_element(4)->type);
+    EXPECT_EQ_SIZE_T(3, (v.get_array_element(4)->u.s.len));
+    EXPECT_EQ_STRING("abc", (v.get_array_element(4)->u.s.s), 3);
+    v.clear();    
+
+    // [ [ ] , [ 0 ] , [ 0 , 1 ] , [ 0 , 1 , 2 ] ]
+    EXPECT_EQ_INT(LEPT_PARSE_OK, v.parse("[ [ ] , [ 0 ] , [ 0 , 1 ] , [ 0 , 1 , 2 ] ]"));
+    EXPECT_EQ_INT(LEPT_ARRAY, v.get_type());
+    EXPECT_EQ_SIZE_T(4, v.get_array_size());
+    for (size_t i = 0; i < 4; ++i) {
+        auto *arr = v.get_array_element(i);
+        EXPECT_EQ_INT(LEPT_ARRAY, arr->type);
+        EXPECT_EQ_SIZE_T(i, arr->u.a.size);
+        for (size_t j = 0; j < i; ++j) {
+            auto *element = lept_value_get_array_element((*arr), j);
+            EXPECT_EQ_INT(LEPT_NUMBER, element->type);
+            EXPECT_EQ_DOUBLE(j * 1.0, element->u.num);
+        }
+    }    
+}
+
+static void test_parse_array_miss_comma_or_square_brace()
+{
+    TEST_PARSE_ERROR(LEPT_PARSE_MISS_COMMA_OR_SQUARE_BRACKET, "[1}");
+    TEST_PARSE_ERROR(LEPT_PARSE_MISS_COMMA_OR_SQUARE_BRACKET, "[[]");
+    TEST_PARSE_ERROR(LEPT_PARSE_MISS_COMMA_OR_SQUARE_BRACKET, "[1");
+    TEST_PARSE_ERROR(LEPT_PARSE_MISS_COMMA_OR_SQUARE_BRACKET, "[ 1 2]");
+
+}
+
+#define EXPECT_TRUE(actual) EXPECT_EQ_BASE((actual) != 0, "true", "false", "%s")
+static void test_parse_object()
+{
+    LeptJson v;
+    EXPECT_EQ_INT(LEPT_PARSE_OK, v.parse("{ \
+        \"n\" : null,                       \
+        \"t\" : true,                       \
+        \"f\" : false,                      \
+        \"s\" : \"abc\",                    \
+        \"n\" : 123.123 ,                   \
+        \"a\" : [ 0, 1, 2 ],                   \
+        \"o\" : { \"0\": 0, \"1\": 1, \"2\":2 }\
+    }"));
+
+    EXPECT_EQ_INT(LEPT_OBJECT, v.get_type());
+    EXPECT_EQ_SIZE_T(7, v.get_object_size());
+
+    EXPECT_EQ_INT(LEPT_NULL, v.get_object_value(0)->type);
+    EXPECT_EQ_STRING("n", v.get_object_key(0), v.get_object_key_length(0));
+    EXPECT_EQ_INT(LEPT_TRUE, v.get_object_value(1)->type);
+    EXPECT_EQ_STRING("t", v.get_object_key(1), v.get_object_key_length(1));
+    EXPECT_EQ_INT(LEPT_FALSE, v.get_object_value(2)->type);
+    EXPECT_EQ_STRING("f", v.get_object_key(2), v.get_object_key_length(2));
+    EXPECT_EQ_INT(LEPT_STRING, v.get_object_value(3)->type);
+    EXPECT_EQ_STRING("s", v.get_object_key(3), v.get_object_key_length(3));
+    EXPECT_EQ_STRING("abc", v.get_object_value(3)->u.s.s, v.get_object_value(3)->u.s.len);
+    EXPECT_EQ_SIZE_T(3, v.get_object_value(3)->u.s.len);
+    EXPECT_EQ_INT(LEPT_NUMBER, v.get_object_value(4)->type);
+    EXPECT_EQ_STRING("n", v.get_object_key(4), v.get_object_key_length(4));
+    EXPECT_EQ_DOUBLE(123.123, v.get_object_value(4)->u.num);
+
+    EXPECT_EQ_INT(LEPT_ARRAY, v.get_object_value(5)->type);
+    EXPECT_EQ_STRING("a", v.get_object_key(5), v.get_object_key_length(5));
+    EXPECT_EQ_SIZE_T(3, v.get_object_value(5)->u.a.size);
+    for (int i = 0; i < v.get_object_value(5)->u.a.size; ++i) {
+        auto *e = lept_value_get_array_element(*v.get_object_value(5), i);
+        EXPECT_EQ_INT(LEPT_NUMBER, e->type);
+        EXPECT_EQ_DOUBLE((double)i, e->u.num);
+    }
+
+    EXPECT_EQ_INT(LEPT_OBJECT, v.get_object_value(6)->type);
+    EXPECT_EQ_STRING("o", v.get_object_key(6), v.get_object_key_length(6));
+    EXPECT_EQ_SIZE_T(3, v.get_object_value(6)->u.obj.size);
+    {
+        auto obj = *(v.get_object_value(6));
+        for (int i = 0; i < lept_value_get_object_size(obj); ++i) {
+            auto e = lept_value_get_object_value(obj, i);
+            EXPECT_EQ_SIZE_T(1, lept_value_get_object_key_length(obj, i));
+            EXPECT_TRUE('0' + i == lept_value_get_object_key(obj, i)[0]);
+            EXPECT_EQ_INT(LEPT_NUMBER, e->type);
+            EXPECT_EQ_DOUBLE((double)i, e->u.num);
+        }
+    }
+}
+
+
+static void test_parse_object_miss_key()
+{
+    LeptJson v;
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_KEY, v.parse("{,}"));
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_KEY, v.parse("{ :123, \"a\" : 1}"));
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_KEY, v.parse("{ \"k\":1, }"));
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_KEY, v.parse("{ null:null}"));
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_KEY, v.parse("{ true: true}"));
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_KEY, v.parse("{ false: false}"));
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_KEY, v.parse("{ []: 123}"));
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_KEY, v.parse("{ {}: 111}"));
+}
+
+static void test_parse_object_miss_colon()
+{
+    LeptJson v;
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_COLON, v.parse("{\"a\" ,}"));
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_COLON, v.parse("{\"a\" \"b\"}"));
+}
+    
+static void test_parse_object_miss_comma_or_curly_bracket()
+{
+    LeptJson v;
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_COMMA_OR_CURLY_BRACKET, v.parse("{ \"a\": 1233 "));
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_COMMA_OR_CURLY_BRACKET, v.parse("{ \"a\":{}"));
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_COMMA_OR_CURLY_BRACKET, v.parse("{\"a\": 1 \"b\": 2}"));
+    EXPECT_EQ_INT(LEPT_PARSE_MISS_COMMA_OR_CURLY_BRACKET, v.parse("{\"a\":1 ]"));
+}
 
 static void test_access_string()
 {
@@ -262,6 +406,13 @@ static void test_parse()
     test_parse_false();
     test_parse_number();
     test_parse_string();
+    test_parse_array();
+    test_parse_object();
+
+    test_parse_object_miss_key();
+    test_parse_object_miss_colon();
+    test_parse_object_miss_comma_or_curly_bracket();
+    test_parse_array_miss_comma_or_square_brace();
     test_parse_missing_quotation_mark();
     test_parse_invalid_string_escape();
     test_parse_invalid_string_char();
